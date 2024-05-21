@@ -70,6 +70,11 @@ class FinisherOptionsFlexFormOverridesConverter
         $fieldConfiguration = $prototypeFinisherDefinition['FormEngine']['elements'][$optionKey] ?? [];
 
         if ($fieldConfiguration['section'] ?? false) {
+            if (empty($value)) {
+                // Do not process empty values for sections
+                return;
+            }
+
             $processedOptionValue = [];
 
             foreach ($value ?: [] as $optionListValue) {
