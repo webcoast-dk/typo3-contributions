@@ -29,6 +29,8 @@ use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Schema\SchemaConfig;
 use Doctrine\DBAL\Schema\SchemaDiff;
 use Doctrine\DBAL\Schema\Table;
+use Doctrine\DBAL\Types\IntegerType;
+use Doctrine\DBAL\Types\StringType;
 use TYPO3\CMS\Core\Database\Connection;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Database\Platform\PlatformInformation;
@@ -585,6 +587,16 @@ class ConnectionMigrator
                     foreach ($statements as $statement) {
                         $updateSuggestions['change'][md5($statement)] = $statement;
                         $updateSuggestions['change_currentValue'][md5($statement)] = $currentDeclaration;
+                    }
+
+                    $indexedSearchPrerequisiteStatements = $this->getIndexedSearchTruncateTablePrerequisiteStatements($this->connection, $changedTable, $changedColumn);
+                    if ($indexedSearchPrerequisiteStatements !== []) {
+                        foreach ($indexedSearchPrerequisiteStatements as $statement => $reason) {
+                            $updateSuggestions['change'][md5($statement)] = $statement;
+                            if ($reason !== '') {
+                                $updateSuggestions['change_currentValue'][md5($statement)] = $reason;
+                            }
+                        }
                     }
                 }
             }
@@ -1286,5 +1298,43 @@ class ConnectionMigrator
         }
 
         return 'mysql';
+    }
+
+    /**
+     * @todo DataMigration - handle this in another way after refactoring the connection migration stuff.
+     *
+     * @param Connection $connection
+     * @param TableDiff $changedTable
+     * @param ColumnDiff $modifiedColumn
+     * @return array<non-empty-string, string>
+     */
+    private function getIndexedSearchTruncateTablePrerequisiteStatements(Connection $connection, \Doctrine\DBAL\Schema\TableDiff $changedTable, ColumnDiff $modifiedColumn): array
+    {
+        /** @var array<string, string[]> $tableFields */
+        $tableFields = [
+            'index_phash' => ['phash', 'phash_grouping', 'contentHash'],
+            'index_fulltext' => ['phash'],
+            'index_rel' => ['phash', 'wid'],
+            'index_words' => ['wid'],
+            'index_section' => ['phash', 'phash_t3'],
+            'index_grlist' => ['phash', 'phash_x', 'hash_gr_list'],
+            'index_debug' => ['phash'],
+        ];
+        $tableName = $changedTable->getOldTable()->getName();
+        $oldType = $modifiedColumn->getOldColumn()->getType();
+        $newType = $modifiedColumn->getNewColumn()->getType();
+        if (($tableFields[$tableName] ?? []) === []
+            || !($oldType instanceof IntegerType)
+            || !($newType instanceof StringType)
+        ) {
+            return [];
+        }
+        $databasePlatform = $connection->getDatabasePlatform();
+        if (in_array($modifiedColumn->getOldColumn()->getName(), $tableFields[$tableName], true)) {
+            return [
+                $databasePlatform->getTruncateTableSQL($changedTable->getOldTable()->getQuotedName($databasePlatform)) => 'Truncate table needed due to type change',
+            ];
+        }
+        return [];
     }
 }

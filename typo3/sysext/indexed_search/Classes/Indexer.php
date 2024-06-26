@@ -159,9 +159,9 @@ class Indexer
     /**
      * Content of TYPO3 page
      *
-     * @var int
+     * @var string
      */
-    public $content_md5h;
+    public $content_md5h = '';
 
     /**
      * @var array
@@ -324,7 +324,7 @@ class Indexer
             }
             $this->log_pull();
             // Calculating a hash over what is to be the actual page content. Maybe this hash should not include title,description and keywords? The bodytext is the primary concern. (on the other hand a changed page-title would make no difference then, so don't!)
-            $this->content_md5h = IndexedSearchUtility::md5inthash(implode('', $this->contentParts));
+            $this->content_md5h = md5(implode('', $this->contentParts));
             // This function checks if there is already a page (with gr_list = 0,-1) indexed and if that page has the very same contentHash.
             // If the contentHash is the same, then we can rest assured that this page is already indexed and regardless of mtime and origContent we don't need to do anything more.
             // This will also prevent pages from being indexed if a fe_users has logged in and it turns out that the page content is not changed anyway. fe_users logged in should always search with hash_gr_list = "0,-1" OR "[their_group_list]". This situation will be prevented only if the page has been indexed with no user login on before hand. Else the page will be indexed by users until that event. However that does not present a serious problem.
@@ -879,7 +879,7 @@ class Indexer
                             $this->log_pull();
                             if (is_array($contentParts)) {
                                 // Calculating a hash over what is to be the actual content. (see indexTypo3PageContent())
-                                $content_md5h = IndexedSearchUtility::md5inthash(implode('', $contentParts));
+                                $content_md5h = md5(implode('', $contentParts));
                                 if ($this->checkExternalDocContentHash($phash_arr['phash_grouping'], $content_md5h) || $force) {
                                     // Increment counter:
                                     $this->externalFileCounter++;
@@ -1075,7 +1075,7 @@ class Indexer
             // Cut after 60 chars because the index_words.baseword varchar field has this length. This MUST be the same.
             if (!isset($retArr[$val])) {
                 // Word ID (wid)
-                $retArr[$val]['hash'] = IndexedSearchUtility::md5inthash($val);
+                $retArr[$val]['hash'] = md5($val);
                 // Metaphone value is also 60 only chars long
                 $metaphone = $this->enableMetaphoneSearch ? substr($this->metaphone($val, $this->storeMetaphoneInfoAsWords), 0, 60) : '';
                 $retArr[$val]['metaphone'] = $metaphone;
@@ -1111,7 +1111,7 @@ class Indexer
                 // First occurrence (used for ranking results)
                 $retArr[$val]['first'] = $key;
                 // Word ID (wid)
-                $retArr[$val]['hash'] = IndexedSearchUtility::md5inthash($val);
+                $retArr[$val]['hash'] = md5($val);
                 // Metaphone value is also only 60 chars long
                 $metaphone = $this->enableMetaphoneSearch ? substr($this->metaphone($val, $this->storeMetaphoneInfoAsWords), 0, 60) : '';
                 $retArr[$val]['metaphone'] = $metaphone;
@@ -1149,7 +1149,7 @@ class Indexer
             $result = $metaphoneRawValue;
         } elseif ($metaphoneRawValue !== '') {
             // Create hash and return integer
-            $result = IndexedSearchUtility::md5inthash($metaphoneRawValue);
+            $result = md5($metaphoneRawValue);
         } else {
             $result = 0;
         }
@@ -1244,17 +1244,17 @@ class Indexer
     /**
      * Stores gr_list in the database.
      *
-     * @param int $hash Search result record phash
-     * @param int $phash_x Actual phash of current content
+     * @param string $hash Search result record phash
+     * @param string $phash_x Actual phash of current content
      * @see update_grlist()
      */
-    public function submit_grlist($hash, $phash_x)
+    public function submit_grlist(string $hash, string $phash_x)
     {
         // Setting the gr_list record
         $fields = [
             'phash' => $hash,
             'phash_x' => $phash_x,
-            'hash_gr_list' => IndexedSearchUtility::md5inthash($this->conf['gr_list']),
+            'hash_gr_list' => md5($this->conf['gr_list']),
             'gr_list' => $this->conf['gr_list'],
         ];
         if (IndexedSearchUtility::isTableUsed('index_grlist')) {
@@ -1268,10 +1268,10 @@ class Indexer
      * Stores section
      * $hash and $hash_t3 are the same for TYPO3 pages, but different when it is external files.
      *
-     * @param int $hash phash of TYPO3 parent search result record
-     * @param int $hash_t3 phash of the file indexation search record
+     * @param string $hash phash of TYPO3 parent search result record
+     * @param string $hash_t3 phash of the file indexation search record
      */
-    public function submit_section($hash, $hash_t3)
+    public function submit_section(string $hash, string $hash_t3)
     {
         $fields = [
             'phash' => $hash,
@@ -1289,9 +1289,9 @@ class Indexer
     /**
      * Removes records for the indexed page, $phash
      *
-     * @param int $phash phash value to flush
+     * @param string $phash phash value to flush
      */
-    public function removeOldIndexedPages($phash)
+    public function removeOldIndexedPages(string $phash)
     {
         // Removing old registrations for all tables. Because the pages are TYPO3 pages
         // there can be nothing else than 1-1 relations here.
@@ -1299,7 +1299,7 @@ class Indexer
         $tableArray = ['index_phash', 'index_section', 'index_grlist', 'index_fulltext', 'index_debug'];
         foreach ($tableArray as $table) {
             if (IndexedSearchUtility::isTableUsed($table)) {
-                $connectionPool->getConnectionForTable($table)->delete($table, ['phash' => (int)$phash]);
+                $connectionPool->getConnectionForTable($table)->delete($table, ['phash' => $phash]);
             }
         }
 
@@ -1308,7 +1308,7 @@ class Indexer
         // are done in indexRegularDocument($file).
         if (IndexedSearchUtility::isTableUsed('index_section')) {
             $connectionPool->getConnectionForTable('index_section')
-                ->delete('index_section', ['phash_t3' => (int)$phash]);
+                ->delete('index_section', ['phash_t3' => $phash]);
         }
     }
 
@@ -1327,10 +1327,10 @@ class Indexer
      * @param int $mtime Modification time of file.
      * @param int $ctime Creation time of file.
      * @param int $size Size of file in bytes
-     * @param int $content_md5h Content HASH value.
+     * @param string $content_md5h Content HASH value.
      * @param array $contentParts Standard content array (using only title and body for a file)
      */
-    public function submitFilePage($hash, $file, $subinfo, $ext, $mtime, $ctime, $size, $content_md5h, $contentParts)
+    public function submitFilePage($hash, $file, $subinfo, $ext, $mtime, $ctime, $size, string $content_md5h, $contentParts)
     {
         // Find item Type:
         $storeItemType = $this->external_parsers[$ext]->ext2itemtype_map[$ext];
@@ -1405,9 +1405,9 @@ class Indexer
     /**
      * Stores file gr_list for a file IF it does not exist already
      *
-     * @param int $hash phash value of file
+     * @param string $hash phash value of file
      */
-    public function submitFile_grlist($hash)
+    public function submitFile_grlist(string $hash)
     {
         // Testing if there is a gr_list record for a non-logged in user and if so, there is no need to place another one.
         if (!IndexedSearchUtility::isTableUsed('index_grlist')) {
@@ -1421,22 +1421,16 @@ class Indexer
             ->where(
                 $queryBuilder->expr()->eq(
                     'phash',
-                    $queryBuilder->createNamedParameter($hash, Connection::PARAM_INT)
+                    $queryBuilder->createNamedParameter($hash)
                 ),
                 $queryBuilder->expr()->or(
                     $queryBuilder->expr()->eq(
                         'hash_gr_list',
-                        $queryBuilder->createNamedParameter(
-                            IndexedSearchUtility::md5inthash($this->defaultGrList),
-                            Connection::PARAM_INT
-                        )
+                        $queryBuilder->createNamedParameter(md5($this->defaultGrList))
                     ),
                     $queryBuilder->expr()->eq(
                         'hash_gr_list',
-                        $queryBuilder->createNamedParameter(
-                            IndexedSearchUtility::md5inthash($this->conf['gr_list']),
-                            Connection::PARAM_INT
-                        )
+                        $queryBuilder->createNamedParameter(md5($this->conf['gr_list']))
                     )
                 )
             )
@@ -1451,9 +1445,9 @@ class Indexer
     /**
      * Stores file section for a file IF it does not exist
      *
-     * @param int $hash phash value of file
+     * @param string $hash phash value of file
      */
-    public function submitFile_section($hash)
+    public function submitFile_section(string $hash)
     {
         // Testing if there is already a section
         if (!IndexedSearchUtility::isTableUsed('index_section')) {
@@ -1467,7 +1461,7 @@ class Indexer
             ->where(
                 $queryBuilder->expr()->eq(
                     'phash',
-                    $queryBuilder->createNamedParameter($hash, Connection::PARAM_INT)
+                    $queryBuilder->createNamedParameter($hash)
                 ),
                 $queryBuilder->expr()->eq(
                     'page_id',
@@ -1485,9 +1479,9 @@ class Indexer
     /**
      * Removes records for the indexed page, $phash
      *
-     * @param int $phash phash value to flush
+     * @param string $phash phash value to flush
      */
-    public function removeOldIndexedFiles($phash)
+    public function removeOldIndexedFiles(string $phash)
     {
         $connectionPool = GeneralUtility::makeInstance(ConnectionPool::class);
         // Removing old registrations for tables.
@@ -1496,7 +1490,7 @@ class Indexer
             if (!IndexedSearchUtility::isTableUsed($table)) {
                 continue;
             }
-            $connectionPool->getConnectionForTable($table)->delete($table, ['phash' => (int)$phash]);
+            $connectionPool->getConnectionForTable($table)->delete($table, ['phash' => $phash]);
         }
     }
 
@@ -1510,10 +1504,10 @@ class Indexer
      * Return positive integer if the page needs to be indexed
      *
      * @param int $mtime mtime value to test against limits and indexed page (usually this is the mtime of the cached document)
-     * @param int $phash "phash" used to select any already indexed page to see what its mtime is.
+     * @param string $phash "phash" used to select any already indexed page to see what its mtime is.
      * @return int Result integer: Generally: <0 = No indexing, >0 = Do indexing (see $this->reasons): -2) Min age was NOT exceeded and so indexing cannot occur.  -1) mtime matched so no need to reindex page. 0) N/A   1) Max age exceeded, page must be indexed again.   2) mtime of indexed page doesn't match mtime given for current content and we must index page.  3) No mtime was set, so we will index...  4) No indexed page found, so of course we will index.
      */
-    public function checkMtimeTstamp($mtime, $phash)
+    public function checkMtimeTstamp($mtime, string $phash)
     {
         if (!IndexedSearchUtility::isTableUsed('index_phash')) {
             // Not indexed (not in index_phash)
@@ -1523,7 +1517,7 @@ class Indexer
                 ->select(
                     ['item_mtime', 'tstamp'],
                     'index_phash',
-                    ['phash' => (int)$phash],
+                    ['phash' => $phash],
                     [],
                     [],
                     1
@@ -1586,8 +1580,8 @@ class Indexer
                     ['phash'],
                     'index_phash',
                     [
-                        'phash_grouping' => (int)$this->hash['phash_grouping'],
-                        'contentHash' => (int)$this->content_md5h,
+                        'phash_grouping' => $this->hash['phash_grouping'],
+                        'contentHash' => $this->content_md5h,
                     ],
                     [],
                     [],
@@ -1606,11 +1600,11 @@ class Indexer
      * Check content hash for external documents
      * Returns TRUE if the document needs to be indexed (that is, there was no result)
      *
-     * @param int $hashGr phash value to check (phash_grouping)
-     * @param int $content_md5h Content hash to check
+     * @param string $hashGr phash value to check (phash_grouping)
+     * @param string $content_md5h Content hash to check
      * @return bool Returns TRUE if the document needs to be indexed (that is, there was no result)
      */
-    public function checkExternalDocContentHash($hashGr, $content_md5h)
+    public function checkExternalDocContentHash(string $hashGr, string $content_md5h)
     {
         $result = true;
         if (IndexedSearchUtility::isTableUsed('index_phash')) {
@@ -1620,8 +1614,8 @@ class Indexer
                     '*',
                     'index_phash',
                     [
-                        'phash_grouping' => (int)$hashGr,
-                        'contentHash' => (int)$content_md5h,
+                        'phash_grouping' => $hashGr,
+                        'contentHash' => $content_md5h,
                     ]
                 );
 
@@ -1633,10 +1627,10 @@ class Indexer
     /**
      * Checks if a grlist record has been set for the phash value input (looking at the "real" phash of the current content, not the linked-to phash of the common search result page)
      *
-     * @param int $phash_x Phash integer to test.
+     * @param string $phash_x Phash integer to test.
      * @return bool
      */
-    public function is_grlist_set($phash_x)
+    public function is_grlist_set(string $phash_x)
     {
         $result = false;
         if (IndexedSearchUtility::isTableUsed('index_grlist')) {
@@ -1645,7 +1639,7 @@ class Indexer
                 ->count(
                     'phash_x',
                     'index_grlist',
-                    ['phash_x' => (int)$phash_x]
+                    ['phash_x' => $phash_x]
                 );
 
             $result = $count > 0;
@@ -1656,11 +1650,11 @@ class Indexer
     /**
      * Check if a grlist-entry for this hash exists and if not so, write one.
      *
-     * @param int $phash phash of the search result that should be found
-     * @param int $phash_x The real phash of the current content. The two values are different when a page with userlogin turns out to contain the exact same content as another already indexed version of the page; This is the whole reason for the grlist table in fact...
+     * @param string $phash phash of the search result that should be found
+     * @param string $phash_x The real phash of the current content. The two values are different when a page with userlogin turns out to contain the exact same content as another already indexed version of the page; This is the whole reason for the grlist table in fact...
      * @see submit_grlist()
      */
-    public function update_grlist($phash, $phash_x)
+    public function update_grlist(string $phash, string $phash_x)
     {
         if (IndexedSearchUtility::isTableUsed('index_grlist')) {
             $count = (int)GeneralUtility::makeInstance(ConnectionPool::class)
@@ -1669,8 +1663,8 @@ class Indexer
                     'phash',
                     'index_grlist',
                     [
-                        'phash' => (int)$phash,
-                        'hash_gr_list' => IndexedSearchUtility::md5inthash($this->conf['gr_list']),
+                        'phash' => $phash,
+                        'hash_gr_list' => md5($this->conf['gr_list']),
                     ]
                 );
 
@@ -1684,10 +1678,10 @@ class Indexer
     /**
      * Update tstamp for a phash row.
      *
-     * @param int $phash phash value
+     * @param string $phash phash value
      * @param int $mtime If set, update the mtime field to this value.
      */
-    public function updateTstamp($phash, $mtime = 0)
+    public function updateTstamp(string $phash, $mtime = 0)
     {
         if (!IndexedSearchUtility::isTableUsed('index_phash')) {
             return;
@@ -1707,7 +1701,7 @@ class Indexer
                 'index_phash',
                 $updateFields,
                 [
-                    'phash' => (int)$phash,
+                    'phash' => $phash,
                 ]
             );
     }
@@ -1715,9 +1709,9 @@ class Indexer
     /**
      * Update SetID of the index_phash record.
      *
-     * @param int $phash phash value
+     * @param string $phash phash value
      */
-    public function updateSetId($phash)
+    public function updateSetId(string $phash)
     {
         if (!IndexedSearchUtility::isTableUsed('index_phash')) {
             return;
@@ -1731,7 +1725,7 @@ class Indexer
                     'freeIndexSetId' => (int)$this->conf['freeIndexSetId'],
                 ],
                 [
-                    'phash' => (int)$phash,
+                    'phash' => $phash,
                 ]
             );
     }
@@ -1739,10 +1733,10 @@ class Indexer
     /**
      * Update parsetime for phash row.
      *
-     * @param int $phash phash value.
+     * @param string $phash phash value.
      * @param int $parsetime Parsetime value to set.
      */
-    public function updateParsetime($phash, $parsetime)
+    public function updateParsetime(string $phash, $parsetime)
     {
         if (!IndexedSearchUtility::isTableUsed('index_phash')) {
             return;
@@ -1756,7 +1750,7 @@ class Indexer
                     'parsetime' => (int)$parsetime,
                 ],
                 [
-                    'phash' => (int)$phash,
+                    'phash' => $phash,
                 ]
             );
     }
@@ -1817,7 +1811,7 @@ class Indexer
         }
 
         $wordListArrayCount = count($wordListArray);
-        $phashArray = array_map('intval', array_column($wordListArray, 'hash'));
+        $phashArray = array_column($wordListArray, 'hash');
 
         $queryBuilder = GeneralUtility::makeInstance(ConnectionPool::class)->getQueryBuilderForTable('index_words');
         $count = (int)$queryBuilder->count('baseword')
@@ -1825,7 +1819,7 @@ class Indexer
             ->where(
                 $queryBuilder->expr()->in(
                     'wid',
-                    $queryBuilder->createNamedParameter($phashArray, Connection::PARAM_INT_ARRAY)
+                    $queryBuilder->quoteArrayBasedValueListToStringList($phashArray)
                 )
             )
             ->executeQuery()
@@ -1840,7 +1834,7 @@ class Indexer
                 ->where(
                     $queryBuilder->expr()->in(
                         'wid',
-                        $queryBuilder->createNamedParameter($phashArray, Connection::PARAM_INT_ARRAY)
+                        $queryBuilder->quoteArrayBasedValueListToStringList($phashArray)
                     )
                 )
                 ->executeQuery();
@@ -1874,9 +1868,9 @@ class Indexer
      * Submits RELATIONS between words and phash
      *
      * @param array $wordList Word list array
-     * @param int $phash phash value
+     * @param string $phash phash value
      */
-    public function submitWords($wordList, $phash)
+    public function submitWords($wordList, string $phash)
     {
         if (!IndexedSearchUtility::isTableUsed('index_rel')) {
             return;
@@ -1896,7 +1890,7 @@ class Indexer
             $stopWords[$row['wid']] = $row;
         }
 
-        $connectionPool->getConnectionForTable('index_rel')->delete('index_rel', ['phash' => (int)$phash]);
+        $connectionPool->getConnectionForTable('index_rel')->delete('index_rel', ['phash' => $phash]);
 
         $fields = ['phash', 'wid', 'count', 'first', 'freq', 'flags'];
         $rows = [];
@@ -1905,7 +1899,7 @@ class Indexer
                 continue;
             }
             $rows[] = [
-                (int)$phash,
+                $phash,
                 (int)$val['hash'],
                 (int)$val['count'],
                 (int)($val['first'] ?? 0),
@@ -1957,10 +1951,10 @@ class Indexer
             'staticPageArguments' => is_array($this->conf['staticPageArguments']) ? json_encode($this->conf['staticPageArguments']) : null,
         ];
         // Set grouping hash (Identifies a "page" combined of id, type, language, mountpoint and cHash parameters):
-        $this->hash['phash_grouping'] = IndexedSearchUtility::md5inthash(serialize($hArray));
+        $this->hash['phash_grouping'] = md5(serialize($hArray));
         // Add gr_list and set plain phash (Subdivision where special page composition based on login is taken into account as well. It is expected that such pages are normally similar regardless of the login.)
         $hArray['gr_list'] = (string)$this->conf['gr_list'];
-        $this->hash['phash'] = IndexedSearchUtility::md5inthash(serialize($hArray));
+        $this->hash['phash'] = md5(serialize($hArray));
     }
 
     /**
@@ -1978,10 +1972,10 @@ class Indexer
             'file' => $file,
         ];
         // Set grouping hash:
-        $hash['phash_grouping'] = IndexedSearchUtility::md5inthash(serialize($hArray));
+        $hash['phash_grouping'] = md5(serialize($hArray));
         // Add subinfo
         $hArray['subinfo'] = $subinfo;
-        $hash['phash'] = IndexedSearchUtility::md5inthash(serialize($hArray));
+        $hash['phash'] = md5(serialize($hArray));
         return $hash;
     }
 

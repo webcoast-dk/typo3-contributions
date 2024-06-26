@@ -634,7 +634,7 @@ class IndexSearchRepository
         $expressionBuilder = GeneralUtility::makeInstance(ConnectionPool::class)
             ->getQueryBuilderForTable('index_words')
             ->expr();
-        $wSel = $expressionBuilder->eq('IW.wid', IndexedSearchUtility::md5inthash($sWord));
+        $wSel = $expressionBuilder->eq('IW.wid', $expressionBuilder->literal(md5($sWord)));
         $this->wSelClauses[] = $wSel;
         return $this->execPHashListQuery($wSel, $expressionBuilder->eq('is_stopword', 0));
     }
@@ -888,8 +888,8 @@ class IndexSearchRepository
             ->where(
                 $queryBuilder->expr()->in(
                     'IP.phash',
-                    $queryBuilder->quoteArrayBasedValueListToIntegerList(
-                        GeneralUtility::intExplode(',', $list, true)
+                    $queryBuilder->quoteArrayBasedValueListToStringList(
+                        GeneralUtility::trimExplode(',', $list, true)
                     )
                 ),
                 QueryHelper::stripLogicalOperatorPrefix($this->mediaTypeWhere()),
@@ -1058,7 +1058,7 @@ class IndexSearchRepository
                 'phash',
                 'index_grlist',
                 [
-                    'phash' => (int)$row['phash_t3'],
+                    'phash' => $row['phash_t3'],
                     'gr_list' => $this->frontendUserGroupList,
                 ]
             );
@@ -1076,7 +1076,7 @@ class IndexSearchRepository
                 'phash',
                 'index_grlist',
                 [
-                    'phash' => (int)$row['phash'],
+                    'phash' => $row['phash'],
                     'gr_list' => $this->frontendUserGroupList,
                 ]
             );
