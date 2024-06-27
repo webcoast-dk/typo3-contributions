@@ -68,10 +68,10 @@ final class TreeFromLineStreamBuilder
      * @var array<string, array<int, string>>
      */
     private array $atImportTypeToSuffixMap = [
-        'constants' => ['typoscript'],
-        'setup' => ['typoscript'],
-        'other' => ['typoscript'],
-        'tsconfig' => ['typoscript', 'tsconfig'],
+        'constants' => ['.typoscript', 'constants.txt', '.ts'],
+        'setup' => ['.typoscript', 'setup.txt', '.ts'],
+        'other' => ['.typoscript'],
+        'tsconfig' => ['.typoscript', '.tsconfig', '.ts'],
     ];
 
     public function __construct(
@@ -212,10 +212,7 @@ final class TreeFromLineStreamBuilder
                 $childNode = new SegmentInclude();
                 $childNode->setName($node->getName());
                 $childNode->setPath($node->getPath());
-                $allowedSuffixes = $this->atImportTypeToSuffixMap[$this->type];
-                foreach ($allowedSuffixes as $allowedSuffix) {
-                    $this->processAtImport($allowedSuffix, $node, $atImportValueToken, $line);
-                }
+                $this->processAtImport($node, $atImportValueToken, $line);
                 continue;
             }
 
@@ -248,7 +245,7 @@ final class TreeFromLineStreamBuilder
      * Warning: Calls buildTree() recursive for each included file.
      * Warning: Calls itself recursive for 'relative' lookups.
      */
-    private function processAtImport(string $fileSuffix, IncludeInterface $node, Token $atImportValueToken, LineInterface $atImportLine, bool $tryRelative = false): void
+    private function processAtImport(IncludeInterface $node, Token $atImportValueToken, LineInterface $atImportLine, bool $tryRelative = false): void
     {
         $atImportValue = $atImportValueToken->getValue();
         if ($tryRelative) {
@@ -263,7 +260,7 @@ final class TreeFromLineStreamBuilder
         if ($absoluteFileName === '') {
             return;
         }
-        if (str_ends_with($absoluteFileName, '.' . $fileSuffix) && is_file($absoluteFileName)) {
+        if ($this->endsWithAllowedSuffix($absoluteFileName) && is_file($absoluteFileName)) {
             // Simple file with allowed file suffix
             if ($this->fileNameValidator->isValid($absoluteFileName)) {
                 $this->addSingleAtImportFile($node, $absoluteFileName, $atImportValue, $atImportLine);
@@ -273,7 +270,7 @@ final class TreeFromLineStreamBuilder
             // Directories with and without ending /
             $filesAndDirs = scandir($absoluteFileName);
             foreach ($filesAndDirs as $potentialInclude) {
-                if (!str_ends_with($potentialInclude, '.' . $fileSuffix)
+                if (!$this->endsWithAllowedSuffix($potentialInclude)
                     || is_dir($absoluteFileName . '/' . $potentialInclude)
                     || !$this->fileNameValidator->isValid($absoluteFileName . '/' . $potentialInclude)
                 ) {
@@ -284,22 +281,13 @@ final class TreeFromLineStreamBuilder
                 $this->addSingleAtImportFile($node, $singleAbsoluteFileName, $identifier, $atImportLine);
                 $this->addStaticMagicFromGlobals($node, $identifier);
             }
-        } elseif (is_file($absoluteFileName . '.' . $fileSuffix)) {
-            // File without .typoscript / .tsconfig suffix, but exists when suffix is added
-            if ($this->fileNameValidator->isValid($absoluteFileName . '.' . $fileSuffix)) {
-                $singleAbsoluteFileName = $absoluteFileName . '.' . $fileSuffix;
-                $identifier = $atImportValue . '.' . $fileSuffix;
-                $this->addSingleAtImportFile($node, $singleAbsoluteFileName, $identifier, $atImportLine);
-                $this->addStaticMagicFromGlobals($node, $identifier);
-            }
         } elseif (str_contains($absoluteFileName, '*')) {
             // Something with *
             $directory = rtrim(dirname($absoluteFileName) . '/');
             $directoryExists = is_dir($directory);
             if (!$directoryExists && str_starts_with($atImportValue, './') && !$tryRelative) {
                 // See if we can import some relative wildcard like "./Setup/*" or "./Setup/*.typoscript"
-                $this->processAtImport($fileSuffix, $node, $atImportValueToken, $atImportLine, true);
-                return;
+                $this->processAtImport($node, $atImportValueToken, $atImportLine, true);                return;
             }
             if (!$directoryExists) {
                 // Absolute directory. There is nothing to import if the directory does not exist.
@@ -315,11 +303,7 @@ final class TreeFromLineStreamBuilder
                 return;
             }
             // Normalize right side, making sure it always ends with $fileSuffix ".typoscript" / ".tsconfig"
-            if (str_ends_with($filePattern, $fileSuffix)) {
-                $filePattern = mb_substr($filePattern, 0, -1 * strlen($fileSuffix));
-                $filePattern = rtrim($filePattern, '.');
-            }
-            $filePattern = $filePattern . '.' . $fileSuffix;
+            $filePattern = rtrim($filePattern, '.');
             $wildcardPosition = mb_strpos($filePattern, '*');
             $leftPrefix = mb_substr($filePattern, 0, $wildcardPosition);
             $rightPrefix = mb_substr($filePattern, $wildcardPosition + 1);
@@ -329,6 +313,7 @@ final class TreeFromLineStreamBuilder
                     || $potentialInclude === '..'
                     || !str_starts_with($potentialInclude, $leftPrefix)
                     || !str_ends_with($potentialInclude, $rightPrefix)
+                    || !$this->endsWithAllowedSuffix($potentialInclude)
                     || is_dir($directory . $potentialInclude)
                     || !$this->fileNameValidator->isValid($directory . $potentialInclude)
                 ) {
@@ -339,9 +324,26 @@ final class TreeFromLineStreamBuilder
                 $this->addSingleAtImportFile($node, $singleAbsoluteFileName, $identifier, $atImportLine);
                 $this->addStaticMagicFromGlobals($node, $identifier);
             }
+        } elseif (!$this->endsWithAllowedSuffix($absoluteFileName)) {
+            // File without .typoscript / .tsconfig suffix, but exists when suffix is added
+            $allowedSuffixes = $this->atImportTypeToSuffixMap[$this->type] ?? [];
+            foreach ($allowedSuffixes as $fileSuffix) {
+                if (is_file($absoluteFileName . $fileSuffix)) {
+                    if ($this->fileNameValidator->isValid($absoluteFileName . $fileSuffix)) {
+                        $singleAbsoluteFileName = $absoluteFileName . $fileSuffix;
+                        $identifier = $atImportValue . $fileSuffix;
+                        $this->addSingleAtImportFile($node, $singleAbsoluteFileName, $identifier, $atImportLine);
+                        $this->addStaticMagicFromGlobals($node, $identifier);
+                    }
+                } elseif (!$tryRelative) {
+                    // See if we can import relative "./foo.typoscript" or "foo.typoscript"
+                    $newAtImportValueToken = GeneralUtility::makeInstance(Token::class, $atImportValueToken->getType(), $atImportValueToken->getValue() . $fileSuffix, $atImportValueToken->getLine(), $atImportValueToken->getColumn());
+                    $this->processAtImport($node, $newAtImportValueToken, $atImportLine, true);
+                }
+            }
         } elseif (!$tryRelative) {
             // See if we can import relative "./foo.typoscript" or "foo.typoscript"
-            $this->processAtImport($fileSuffix, $node, $atImportValueToken, $atImportLine, true);
+            $this->processAtImport($node, $atImportValueToken, $atImportLine, true);
         }
     }
 
@@ -564,5 +566,16 @@ final class TreeFromLineStreamBuilder
                 $parentNode->addChild($node);
             }
         }
+    }
+
+    protected function endsWithAllowedSuffix(string $absoluteFileName): bool
+    {
+        $allowedSuffixes = $this->atImportTypeToSuffixMap[$this->type] ?? [];
+        foreach ($allowedSuffixes as $suffix) {
+            if (str_ends_with($absoluteFileName, $suffix)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

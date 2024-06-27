@@ -770,6 +770,21 @@ final class TreeFromLineStreamBuilderTest extends FunctionalTestCase
             $atImportLineStream,
             $expectedTree,
         ];
+
+        $atImportStatement = '@import \'EXT:core/Tests/Functional/TypoScript/IncludeTree/Fixtures/AtImport/AbsoluteImport/Scenario5/setup.txt\'';
+        $atImportLineStream = (new LosslessTokenizer())->tokenize($atImportStatement);
+        $expectedTree = new FileInclude();
+        $expectedTree->setLineStream($atImportLineStream);
+        $expectedTree->setSplit();
+        $subNode = new AtImportInclude();
+        $subNode->setName('EXT:core/Tests/Functional/TypoScript/IncludeTree/Fixtures/AtImport/AbsoluteImport/Scenario5/setup.txt');
+        $subNode->setLineStream((new LosslessTokenizer())->tokenize("setup.txt\n"));
+        $subNode->setOriginalLine(iterator_to_array($atImportLineStream->getNextLine())[0]);
+        $expectedTree->addChild($subNode);
+        yield 'atImport with setup.txt' => [
+            $atImportLineStream,
+            $expectedTree,
+        ];
     }
 
     #[DataProvider('buildTreeAtImportDataProvider')]
